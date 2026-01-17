@@ -290,7 +290,7 @@ const Lobby = new Schema({
   },
   privateChannel: {
     type: Boolean,
-    default: false,
+    default: true,
   },
   description: {
     type: String,

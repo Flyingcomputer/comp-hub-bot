@@ -583,10 +583,10 @@ async function findRoomChannel(doc, roomNumber) {
       parent: category,
     });
 
-    await channel.createOverwrite(roleStaff, { VIEW_CHANNEL: true });
-    await channel.createOverwrite(roleVerified, { VIEW_CHANNEL: true });
-    await channel.createOverwrite(roleMatchmaking, { VIEW_CHANNEL: true });
-    await channel.createOverwrite(guild.roles.everyone, { VIEW_CHANNEL: false });
+    await channel.createOverwrite(roleStaff, { VIEW_CHANNEL: true, SEND_MESSAGES: true });
+    await channel.createOverwrite(roleVerified, { VIEW_CHANNEL: true, SEND_MESSAGES: false });
+    await channel.createOverwrite(roleMatchmaking, { VIEW_CHANNEL: true, SEND_MESSAGES: false });
+    await channel.createOverwrite(guild.roles.everyone, { VIEW_CHANNEL: false, SEND_MESSAGES: false });
   }
 
   return channel;
@@ -1094,8 +1094,8 @@ function startLobby(docId) {
               }
             }
 
-            if (doc.privateChannel) {
-              await makeLobbyRoomPrivate(doc, roomChannel);
+            if (!doc.privateChannel) {
+              await makeLobbyRoomPublic(doc, roomChannel);
             }
 
             const joinLobbyButtonCopy = JSON.parse(JSON.stringify(joinLobbyButton));
@@ -1442,8 +1442,8 @@ function deleteLobby(doc, message, sendMessage) {
 
     // eslint-disable-next-line max-len
     const channel = guild.channels.cache.find((c) => c.name.toLowerCase() === getRoomName(room.number).toLowerCase());
-    if (channel && doc.privateChannel) {
-      await makeLobbyRoomPublic(doc, channel);
+    if (channel && !doc.privateChannel) {
+      await makeLobbyRoomPrivate(doc, channel);
     }
 
     if (message && channel && message.channel.id !== channel.id) {
@@ -3013,8 +3013,8 @@ client.on('messageDelete', async (message) => {
             channel.success('Lobby ended.');
           }
 
-          if (doc.privateChannel) {
-            makeLobbyRoomPublic(doc, channel).then();
+          if (!doc.privateChannel) {
+            makeLobbyRoomPrivate(doc, channel).then();
           }
         }
 

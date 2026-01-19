@@ -1017,15 +1017,12 @@ async function setupTournamentRound(doc, roomChannel) {
 async function makeLobbyRoomPrivate(doc, roomChannel) {
   const guild = client.guilds.cache.get(doc.guild);
 
-  const roleVerified = await guild.roles.findByName(config.roles.verified_player_role);
-  const roleMatchmaking = await guild.roles.findByName(config.roles.matchmaking_role);
-
-  await roomChannel.createOverwrite(roleVerified, { VIEW_CHANNEL: true, SEND_MESSAGES: false });
-  await roomChannel.createOverwrite(roleMatchmaking, { VIEW_CHANNEL: true, SEND_MESSAGES: false });
-
   for (const p of doc.players) {
-    const member = await guild.members.fetch(p);
-    await roomChannel.createOverwrite(member, { VIEW_CHANNEL: true, SEND_MESSAGES: true });
+    const overwrite = roomChannel.permissionOverwrites.get(p);
+
+    if (overwrite) {
+      await overwrite.delete();
+    }
   }
 }
 
@@ -1038,17 +1035,9 @@ async function makeLobbyRoomPrivate(doc, roomChannel) {
 async function makeLobbyRoomPublic(doc, roomChannel) {
   const guild = client.guilds.cache.get(doc.guild);
 
-  const roleVerified = await guild.roles.findByName(config.roles.verified_player_role);
-  const roleMatchmaking = await guild.roles.findByName(config.roles.matchmaking_role);
-
-  await roomChannel.createOverwrite(roleVerified, { VIEW_CHANNEL: true, SEND_MESSAGES: true });
-  await roomChannel.createOverwrite(roleMatchmaking, { VIEW_CHANNEL: true, SEND_MESSAGES: true });
-
   for (const p of doc.players) {
-    const overwrite = roomChannel.permissionOverwrites.get(p);
-    if (overwrite) {
-      await overwrite.delete();
-    }
+    const member = await guild.members.fetch(p);
+    await roomChannel.createOverwrite(member, { VIEW_CHANNEL: true, SEND_MESSAGES: true });
   }
 }
 
@@ -1094,9 +1083,7 @@ function startLobby(docId) {
               }
             }
 
-            if (!doc.privateChannel) {
-              await makeLobbyRoomPublic(doc, roomChannel);
-            }
+            await makeLobbyRoomPublic(doc, roomChannel);
 
             const joinLobbyButtonCopy = JSON.parse(JSON.stringify(joinLobbyButton));
             const leaveLobbyButtonCopy = JSON.parse(JSON.stringify(leaveLobbyButton));
@@ -1442,7 +1429,7 @@ function deleteLobby(doc, message, sendMessage) {
 
     // eslint-disable-next-line max-len
     const channel = guild.channels.cache.find((c) => c.name.toLowerCase() === getRoomName(room.number).toLowerCase());
-    if (channel && !doc.privateChannel) {
+    if (channel) {
       await makeLobbyRoomPrivate(doc, channel);
     }
 
@@ -3013,9 +3000,7 @@ client.on('messageDelete', async (message) => {
             channel.success('Lobby ended.');
           }
 
-          if (!doc.privateChannel) {
-            makeLobbyRoomPrivate(doc, channel).then();
-          }
+          makeLobbyRoomPrivate(doc, channel).then();
         }
 
         room.lobby = null;

@@ -1204,7 +1204,7 @@ function startLobby(docId) {
 
               tracks = tracks.join('\n');
 
-              doc.number = getLobbyNumber(doc.type);
+              doc.number = await getLobbyNumber(doc.type);
               await doc.save();
 
               const { players } = doc;

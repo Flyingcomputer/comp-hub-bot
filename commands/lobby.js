@@ -1160,7 +1160,7 @@ function startLobby(docId) {
 
               const poolBattle3 = require('../db/pools/battle_3');
               const battleArenaNames = poolBattle3.flat();
-              const raceLapCounts = [1, 3, 5, 7];
+              const raceLapCounts = [3, 5, 7];
 
               const chaosLapCounts = [];
               const chaosEngineEmotes = [];

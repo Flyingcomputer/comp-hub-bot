@@ -1,4 +1,7 @@
 const shuffleArray = require('./shuffleArray');
+const poolBattle3 = require('../db/pools/battle_3');
+
+const BATTLE_ARENAS = poolBattle3.flat();
 
 /**
  * Removes banned tracks from the track pool
@@ -12,11 +15,56 @@ function removeBannedTracks(pool, doc) {
 }
 
 /**
+ * Generates chaos tracks with duplicate tracks allowed.
+ * Groups battle arenas together at the start or end to minimize lobby rebuilds.
+ * @param doc
+ * @returns array
+ */
+function generateChaosTracks(doc) {
+  let pools = doc.getTrackPools();
+
+  if (pools.length <= 0) {
+    return ['-'];
+  }
+
+  const pool = pools[0];
+
+  if (!pool || pool.length <= 0) {
+    return ['-'];
+  }
+
+  const racingTracks = [];
+  const battleTracks = [];
+
+  for (let i = 0; i < doc.trackCount; i += 1) {
+    const track = pool[Math.floor(Math.random() * pool.length)];
+    if (BATTLE_ARENAS.includes(track)) {
+      battleTracks.push(track);
+    } else {
+      racingTracks.push(track);
+    }
+  }
+
+  const shuffledRacing = shuffleArray(racingTracks);
+  const shuffledBattle = shuffleArray(battleTracks);
+
+  if (Math.random() > 0.5) {
+    return shuffledBattle.concat(shuffledRacing);
+  }
+
+  return shuffledRacing.concat(shuffledBattle);
+}
+
+/**
  * Generates tracks from pools
  * @param doc
  * @returns Promise
  */
 async function generateTracks(doc) {
+  if (doc.isChaos()) {
+    return generateChaosTracks(doc);
+  }
+
   let pools = doc.getTrackPools();
 
   if (pools.length <= 0) {

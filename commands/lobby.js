@@ -33,8 +33,12 @@ const {
   CUSTOM_OPTION_TEAM_CREATION,
   CUSTOM_OPTION_TYPE,
   CUSTOM_OPTION_MMR_LOCK,
+  CUSTOM_OPTION_CHAOS_RANDOM_LAPS,
+  CUSTOM_OPTION_CHAOS_RANDOM_ENGINES,
+  CUSTOM_OPTION_CHAOS_RANDOM_RULESETS,
   TEAM_CREATION_BALANCED,
-  TEAM_CREATION_RANDOM
+  TEAM_CREATION_RANDOM,
+  CHAOS,
 } = require('../db/models/lobby');
 const config = require('../config');
 const { Cooldown } = require('../db/models/cooldown');
@@ -395,7 +399,7 @@ async function getEmbed(doc, players, tracks, roomChannel) {
     settings.push(`Team Creation: **${ucfirst(doc.teamCreation)}**`);
   }
 
-  if (doc.isRacing()) {
+  if (doc.isRacing() && !doc.isChaos()) {
     settings.push(`Lap Count: **${doc.lapCount}**`);
     settings.push(`Ruleset: ${ruleset.emote} **${ruleset.name}**`);
 
@@ -405,6 +409,20 @@ async function getEmbed(doc, players, tracks, roomChannel) {
 
     if (survivalStyle) {
       settings.push(`Survival Style: **${survivalStyle}**`);
+    }
+  }
+
+  if (doc.isChaos()) {
+    if (doc.chaosRandomLaps) {
+      settings.push(`Lap Counts: **Random**`);
+    }
+
+    if (doc.chaosRandomRulesets) {
+      settings.push(`Rulesets: **Random**`);
+    }
+
+    if (doc.chaosRandomEngines) {
+      settings.push(`Engine Styles: **Random**`);
     }
   }
 
@@ -600,7 +618,7 @@ async function findRoomChannel(doc, roomNumber) {
 async function getPlayersText(doc) {
   let playersText = '';
 
-  if (doc.isTeams()) {
+  if (doc.isTeams() || (doc.isChaos() && doc.teamList && doc.teamList.length > 0)) {
     playersText += '**Teams:**\n';
 
     // eslint-disable-next-line guard-for-in
@@ -1107,6 +1125,217 @@ function startLobby(docId) {
 
                 await setupTournamentRound(doc, roomChannel);
               });
+            } else if (doc.isChaos()) {
+              const chaosFormats = ['FFA', 'Duos', '4v4'];
+              const chaosFormat = getRandomArrayElement(chaosFormats);
+
+              let chaosTeamSize = 1;
+              if (chaosFormat === 'Duos') {
+                chaosTeamSize = 2;
+              } else if (chaosFormat === '4v4') {
+                chaosTeamSize = 4;
+              }
+
+              if (chaosTeamSize > 1) {
+                const shuffledPlayers = [...doc.players];
+                for (let i = shuffledPlayers.length - 1; i > 0; i -= 1) {
+                  const j = Math.floor(Math.random() * (i + 1));
+                  [shuffledPlayers[i], shuffledPlayers[j]] = [shuffledPlayers[j], shuffledPlayers[i]];
+                }
+
+                const teams = [];
+                for (let i = 0; i < shuffledPlayers.length; i += chaosTeamSize) {
+                  teams.push(shuffledPlayers.slice(i, i + chaosTeamSize));
+                }
+
+                doc.teamList = teams;
+              }
+
+              if (doc.isDrafting()) {
+                tracks = [];
+                for (let i = 1; i <= doc.trackCount; i += 1) {
+                  tracks.push('*N/A*');
+                }
+              }
+
+              const poolBattle3 = require('../db/pools/battle_3');
+              const battleArenaNames = poolBattle3.flat();
+              const raceLapCounts = [1, 3, 5, 7];
+
+              const chaosLapCounts = [];
+              const chaosEngineEmotes = [];
+              const chaosModes = [];
+              const chaosRulesets = [];
+              const chaosBattleModes = [];
+
+              let availableBattleModes = [];
+              const { battleModesSolos} = require('../db/modes_battle');
+
+              battleModesSolos.forEach((battleMode) => {
+                battleMode.forEach((mode) => {
+                  if (mode.maxPlayers >= doc.players.length) {
+                    availableBattleModes.push(mode);
+                  }
+                });
+              });
+
+              tracks.forEach((track) => {
+                if (doc.chaosRandomEngines) {
+                  const engine = getRandomArrayElement(engineStyles);
+                  chaosEngineEmotes.push(engine.emote);
+                }
+
+                if (battleArenaNames.includes(track)) {
+                  const compatible = availableBattleModes.filter((m) => m.arenas.length < 1 || m.arenas.includes(track));
+                  const battleMode = compatible.length > 0 ? getRandomArrayElement(compatible).name : 'Limit Battle';
+                  chaosBattleModes.push(battleMode);
+                  chaosLapCounts.push(null);
+                  chaosModes.push('Battle');
+                  chaosRulesets.push(null);
+                } else {
+                  const mode = Math.random() > 0.5 ? 'Items' : 'Itemless';
+                  const laps = doc.chaosRandomLaps ? getRandomArrayElement(raceLapCounts) : doc.lapCount;
+                  const ruleset = doc.chaosRandomRulesets ? getRandomArrayElement(rulesets) : null;
+                  chaosLapCounts.push(laps);
+                  chaosModes.push(mode);
+                  chaosRulesets.push(ruleset);
+                }
+              });
+
+              tracks = tracks.join('\n');
+
+              doc.number = getLobbyNumber(doc.type);
+              await doc.save();
+
+              const { players } = doc;
+              const playersText = await getPlayersText(doc);
+
+              const [PSNs, templateUrl, template] = await generateTemplate(players, doc);
+
+              await message.edit({
+                embed: await getEmbed(doc, players, tracks, roomChannel),
+                components: [buttonRow],
+              });
+
+              const fields = [
+                {
+                  name: 'PSN IDs & Ranks',
+                  value: PSNs.join('\n'),
+                  inline: true,
+                },
+                {
+                  name: 'Tracks / Arenas',
+                  value: tracks,
+                  inline: true,
+                },
+              ];
+
+              if (chaosBattleModes.length > 0) {
+                let battleIndex = 0;
+
+                const modesColumn = chaosLapCounts.map((laps) => {
+                  if (laps === null) {
+                    const mode = chaosBattleModes[battleIndex];
+                    battleIndex += 1;
+                    return mode;
+                  }
+
+                  return '-';
+                });
+
+                fields.push({
+                  name: 'Battle Modes',
+                  value: modesColumn.join('\n'),
+                  inline: true,
+                });
+              }
+
+              const chaosSettings = [
+                `Format: **${chaosFormat}**`,
+                `Mode: **${chaosModes.join(', ')}**`,
+              ];
+
+              if (doc.chaosRandomRulesets) {
+                chaosSettings.push(`Ruleset: **${chaosRulesets.map((r) => (r !== null ? r.key.toUpperCase() : '-')).join(', ')}**`);
+              }
+
+              if (doc.chaosRandomLaps) {
+                chaosSettings.push(`Lap Count: **${chaosLapCounts.map((l) => (l !== null ? l : '-')).join(', ')}**`);
+              }
+
+              if (doc.chaosRandomEngines) {
+                chaosSettings.push(`Engine Style: ${chaosEngineEmotes.join(' ')}`);
+              }
+
+              fields.push({
+                name: ':game_die: Chaos Settings',
+                value: chaosSettings.join('\n'),
+                inline: false,
+              });
+
+              roomChannel.send({
+                content: `**The ${doc.getTitle()} has started**\nFormat: **${chaosFormat}**\nYour room is ${roomChannel}.\nUse \`!lobby end\` when your match is done.\n${playersText}`,
+                embed: {
+                  color: doc.getColor(),
+                  title: `The ${doc.getTitle()} has started`,
+                  fields,
+                },
+              }).then((m) => {
+                roomChannel.messages.fetchPinned().then((pinnedMessages) => {
+                  pinnedMessages.forEach((pinnedMessage) => pinnedMessage.unpin());
+                  m.pin();
+
+                  roomChannel.send({
+                    embed: {
+                      color: doc.getColor(),
+                      title: 'Score Template',
+                      description: `\`\`\`${template}\`\`\`\n[Open template on gb.hlorenzi.com](${templateUrl})`,
+                    },
+                  }).then(() => {
+                    if (chaosBattleModes.length > 0) {
+                      sendBattleModeSettings(doc, roomChannel, chaosBattleModes);
+                    }
+
+                    if (doc.ranked) {
+                      roomChannel.info(`Report any rule violations to ranked staff by sending a DM to <@!${config.bot_user_id}>.`);
+                    }
+
+                    // eslint-disable-next-line no-shadow
+                    roomChannel.info('Select a scorekeeper. The scorekeeper can react to this message to make others aware that he is keeping scores. If nobody reacts to this message within 5 minutes the lobby will be ended automatically.').then((m) => {
+                      let reacted = false;
+
+                      setTimeout(() => {
+                        if (!reacted) {
+                          roomChannel.info('Don\'t forget to select your scorekeeper because otherwise the lobby will be ended soon.');
+                        }
+                      }, 240000);
+
+                      m.react('✅');
+
+                      const filter = (r, u) => ['✅'].includes(r.emoji.name) && doc.players.includes(u.id);
+                      const options = { maxUsers: 1, time: 300000, errors: ['time'] };
+
+                      m.awaitReactions(filter, options).then((collected) => {
+                        const reaction = collected.first();
+                        const user = reaction.users.cache.last();
+
+                        m.delete();
+                        roomChannel.success(`<@!${user.id}> has volunteered to do scores. Please make sure you keep the lobby updated about mid-match scores.`);
+                        reacted = true;
+                      }).catch(() => {
+                        // eslint-disable-next-line no-use-before-define
+                        deleteLobby(doc, m);
+                        m.delete();
+                        roomChannel.warn('The lobby was ended automatically because nobody volunteered to keep scores.');
+                      });
+                    });
+
+                    if (doc.isDrafting()) {
+                      doc.initializeDraft(roomChannel);
+                    }
+                  });
+                });
+              });
             } else {
               // Display track column but blank all tracks
               if (doc.isWar() && doc.isDrafting()) {
@@ -1510,6 +1739,9 @@ module.exports = {
         CUSTOM_OPTION_TEAM_CREATION,
         CUSTOM_OPTION_TYPE,
         CUSTOM_OPTION_MMR_LOCK,
+        CUSTOM_OPTION_CHAOS_RANDOM_LAPS,
+        CUSTOM_OPTION_CHAOS_RANDOM_ENGINES,
+        CUSTOM_OPTION_CHAOS_RANDOM_RULESETS,
       ];
 
       const missingOption = custom.find((c) => !availableOptions.includes(c));
@@ -1602,7 +1834,7 @@ module.exports = {
           const lobbyTrackOptions = trackOptions.filter((t) => lobby.getTrackOptions().includes(t.key));
           let trackOption = lobby.getDefaultTrackOption();
 
-          if (lobbyTrackOptions.length > 1 && custom.includes(CUSTOM_OPTION_TRACK_POOL)) {
+          if (lobbyTrackOptions.length > 1 && (lobby.isChaos() || custom.includes(CUSTOM_OPTION_TRACK_POOL))) {
             try {
               trackOption = await message.channel.awaitMenuChoice('Please select the track pool.', message.author.id, lobbyTrackOptions, 1);
               // eslint-disable-next-line no-empty
@@ -1611,6 +1843,57 @@ module.exports = {
           }
 
           lobby.trackOption = trackOption;
+
+          let chaosRandomLaps = true;
+          if (lobby.isChaos() && custom.includes(CUSTOM_OPTION_CHAOS_RANDOM_LAPS)) {
+            try {
+              const buttonId = await message.channel.awaitButtonChoice(
+                'Do you want to randomize lap counts per track?',
+                message.author.id,
+                [yesButton, noButton],
+              );
+
+              chaosRandomLaps = (buttonId === 'yes');
+              // eslint-disable-next-line no-empty
+            } catch (e) {
+            }
+          }
+
+          lobby.chaosRandomLaps = chaosRandomLaps;
+
+          let chaosRandomEngines = false;
+          if (lobby.isChaos() && custom.includes(CUSTOM_OPTION_CHAOS_RANDOM_ENGINES)) {
+            try {
+              const buttonId = await message.channel.awaitButtonChoice(
+                'Do you want to randomize engine styles per track?',
+                message.author.id,
+                [yesButton, noButton],
+              );
+
+              chaosRandomEngines = (buttonId === 'yes');
+              // eslint-disable-next-line no-empty
+            } catch (e) {
+            }
+          }
+
+          lobby.chaosRandomEngines = chaosRandomEngines;
+
+          let chaosRandomRulesets = false;
+          if (lobby.isChaos() && custom.includes(CUSTOM_OPTION_CHAOS_RANDOM_RULESETS)) {
+            try {
+              const buttonId = await message.channel.awaitButtonChoice(
+                'Do you want to randomize rulesets per track?',
+                message.author.id,
+                [yesButton, noButton],
+              );
+
+              chaosRandomRulesets = (buttonId === 'yes');
+              // eslint-disable-next-line no-empty
+            } catch (e) {
+            }
+          }
+
+          lobby.chaosRandomRulesets = chaosRandomRulesets;
 
           let maxPlayerCount = lobby.getDefaultPlayerCount();
 
@@ -1667,7 +1950,7 @@ module.exports = {
           lobby.lapCount = lobby.getDefaultLapCount();
 
           let ruleset = 1;
-          if (!lobby.isBattle() && custom.includes(CUSTOM_OPTION_RULESET)) {
+          if (!lobby.isBattle() && !lobby.isChaos() && custom.includes(CUSTOM_OPTION_RULESET)) {
             try {
               const rulesetOptions = rulesets.filter((r) => r.rankedEnabled);
 

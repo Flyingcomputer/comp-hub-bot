@@ -17,6 +17,7 @@ const {
   INSTA_DUOS,
   INSTA_3V3,
   INSTA_4V4,
+  CHAOS,
 } = require('./models/lobby');
 
 module.exports.lobbyTypes = [
@@ -143,6 +144,13 @@ module.exports.lobbyTypes = [
     key: INSTA_4V4,
     name: 'Insta 4 vs. 4',
     description: null,
+    emote: null,
+    default: false,
+  },
+  {
+    key: CHAOS,
+    name: 'Chaos',
+    description: 'Random mix of items, itemless and battle with random formats.',
     emote: null,
     default: false,
   },

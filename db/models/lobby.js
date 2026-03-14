@@ -25,6 +25,7 @@ const poolItemless3 = require('../pools/itemless_3');
 const poolBattle3 = require('../pools/battle_3');
 const poolBattle4 = require('../pools/battle_4');
 const poolBattle5 = require('../pools/battle_5');
+const shuffleArray = require("../../utils/shuffleArray");
 
 const engineKeys = engineStyles.map((e) => e.key);
 const regionKeys = regions.map((r) => r.key);
@@ -53,6 +54,7 @@ const BATTLE_4V4 = 'battle_4v4';
 const INSTA_DUOS = 'insta_duos';
 const INSTA_3V3 = 'insta_3v3';
 const INSTA_4V4 = 'insta_4v4';
+const CHAOS = 'chaos';
 const TEAM_CREATION_BALANCED = 'balanced';
 const TEAM_CREATION_RANDOM = 'random';
 
@@ -93,6 +95,7 @@ const LEADERBOARDS = {
   [INSTA_DUOS]: LEADERBOARD_URLS.insta_teams,
   [INSTA_3V3]: LEADERBOARD_URLS.insta_teams,
   [INSTA_4V4]: LEADERBOARD_URLS.insta_teams,
+  [CHAOS]: null,
 };
 
 const TRACK_OPTION_RNG = 'random';
@@ -119,6 +122,9 @@ const CUSTOM_OPTION_TEAM_CREATION = 'team_creation';
 const CUSTOM_OPTION_DESCRIPTION = 'description';
 const CUSTOM_OPTION_TYPE = 'type';
 const CUSTOM_OPTION_MMR_LOCK = 'mmr_lock';
+const CUSTOM_OPTION_CHAOS_RANDOM_LAPS = 'chaos_random_laps';
+const CUSTOM_OPTION_CHAOS_RANDOM_ENGINES = 'chaos_random_engines';
+const CUSTOM_OPTION_CHAOS_RANDOM_RULESETS = 'chaos_random_rulesets';
 
 module.exports.RACE_ITEMS_FFA = RACE_ITEMS_FFA;
 module.exports.RACE_ITEMS_DUOS = RACE_ITEMS_DUOS;
@@ -160,6 +166,9 @@ module.exports.CUSTOM_OPTION_PRIVATE_CHANNEL = CUSTOM_OPTION_PRIVATE_CHANNEL;
 module.exports.CUSTOM_OPTION_DESCRIPTION = CUSTOM_OPTION_DESCRIPTION;
 module.exports.CUSTOM_OPTION_TEAM_CREATION = CUSTOM_OPTION_TEAM_CREATION;
 module.exports.CUSTOM_OPTION_MMR_LOCK = CUSTOM_OPTION_MMR_LOCK;
+module.exports.CUSTOM_OPTION_CHAOS_RANDOM_LAPS = CUSTOM_OPTION_CHAOS_RANDOM_LAPS;
+module.exports.CUSTOM_OPTION_CHAOS_RANDOM_ENGINES = CUSTOM_OPTION_CHAOS_RANDOM_ENGINES;
+module.exports.CUSTOM_OPTION_CHAOS_RANDOM_RULESETS = CUSTOM_OPTION_CHAOS_RANDOM_RULESETS;
 module.exports.TRACK_DRAGON_MINES = TRACK_DRAGON_MINES;
 module.exports.TRACK_HYPER_SPACEWAY = TRACK_HYPER_SPACEWAY;
 module.exports.TRACK_RETRO_STADIUM = TRACK_RETRO_STADIUM;
@@ -170,6 +179,7 @@ module.exports.ARENA_MAGNETIC_MAYHEM = ARENA_MAGNETIC_MAYHEM;
 module.exports.DUO_MODES = DUO_MODES;
 module.exports._3V3_MODES = _3V3_MODES;
 module.exports._4V4_MODES = _4V4_MODES;
+module.exports.CHAOS = CHAOS;
 module.exports.TEAM_CREATION_BALANCED = TEAM_CREATION_BALANCED;
 module.exports.TEAM_CREATION_RANDOM = TEAM_CREATION_RANDOM;
 
@@ -217,6 +227,7 @@ const Lobby = new Schema({
       INSTA_DUOS,
       INSTA_3V3,
       INSTA_4V4,
+      CHAOS,
     ],
   },
   trackOption: {
@@ -302,6 +313,18 @@ const Lobby = new Schema({
       TEAM_CREATION_BALANCED,
       TEAM_CREATION_RANDOM
     ],
+  },
+  chaosRandomLaps: {
+    type: Boolean,
+    default: true,
+  },
+  chaosRandomEngines: {
+    type: Boolean,
+    default: false,
+  },
+  chaosRandomRulesets: {
+    type: Boolean,
+    default: false,
   }
 });
 
@@ -358,6 +381,9 @@ Lobby.methods = {
   },
   isSurvival() {
     return [RACE_SURVIVAL].includes(this.type);
+  },
+  isChaos() {
+    return this.type === CHAOS;
   },
   isTeams() {
     return (this.isDuos() || this.is3v3() || this.is4v4());
@@ -477,6 +503,7 @@ Lobby.methods = {
         [INSTA_DUOS]: 16,
         [INSTA_3V3]: 12,
         [INSTA_4V4]: 16,
+        [CHAOS]: 16,
       };
     } else {
       minimumPlayers = {
@@ -498,6 +525,7 @@ Lobby.methods = {
         [INSTA_DUOS]: 6,
         [INSTA_3V3]: 6,
         [INSTA_4V4]: 8,
+        [CHAOS]: 8,
       };
     }
 
@@ -530,6 +558,7 @@ Lobby.methods = {
       [INSTA_DUOS]: 8,
       [INSTA_3V3]: 6,
       [INSTA_4V4]: 8,
+      [CHAOS]: 8,
     };
 
     return defaultPlayers[this.type];
@@ -557,6 +586,7 @@ Lobby.methods = {
         [INSTA_DUOS]: 64,
         [INSTA_3V3]: 48,
         [INSTA_4V4]: 64,
+        [CHAOS]: 64,
       };
     } else {
       maxPlayers = {
@@ -578,6 +608,7 @@ Lobby.methods = {
         [INSTA_DUOS]: 8,
         [INSTA_3V3]: 6,
         [INSTA_4V4]: 8,
+        [CHAOS]: 8,
       };
     }
 
@@ -609,6 +640,7 @@ Lobby.methods = {
       [INSTA_DUOS]: 8,
       [INSTA_3V3]: 8,
       [INSTA_4V4]: 10,
+      [CHAOS]: 8,
     };
 
     return trackCounts[this.type];
@@ -676,7 +708,9 @@ Lobby.methods = {
       }
     }
 
-    if (!this.isBattle() && !this.isRacing()) {
+    if (this.isChaos()) {
+      title = (this.ranked ? 'Ranked ' : 'Unranked ') + 'Chaos';
+    } else if (!this.isBattle() && !this.isRacing()) {
       title += UNKNOWN;
     }
 
@@ -686,7 +720,13 @@ Lobby.methods = {
       title += ' Lobby';
     }
 
-    if (this.isRacing()) {
+    if (this.isChaos()) {
+      if (this.isDrafting()) {
+        title += ' [Drafting]';
+      } else {
+        title += ' [Full RNG]';
+      }
+    } else if (this.isRacing()) {
       const trackOption = trackOptions.find((t) => t.key === this.trackOption);
       title += ` [${trackOption.name}]`;
     } else if (this.isBattle()) {
@@ -722,24 +762,25 @@ Lobby.methods = {
     }
 
     const icons = {
-      [RACE_ITEMS_FFA]: 'https://i.imgur.com/wD4xrSw.png', // Single Bomb
-      [RACE_ITEMS_DUOS]: 'https://i.imgur.com/lo5dwcJ.png', // Uka + Aku Mask
-      [RACE_ITEMS_3V3]: 'https://i.imgur.com/0A2LVaY.png', // Triple Missile
-      [RACE_ITEMS_4V4]: 'https://i.imgur.com/3dvcaur.png', // Firehawk
-      [RACE_SURVIVAL]: 'https://i.imgur.com/QqA2CK5.png', // Poison Symbol
-      [RACE_ITEMLESS_1V1]: 'https://i.imgur.com/45dXDSf.png', // Champion Kart
-      [RACE_ITEMLESS_FFA]: 'https://i.imgur.com/ZmrfJJN.png', // Daredevil
-      [RACE_ITEMLESS_DUOS]: 'https://i.imgur.com/7gFxsmu.png', // Xfinity Kart
-      [RACE_ITEMLESS_3V3]: 'https://i.imgur.com/ZCv0Uwl.png', // Mammoth
-      [RACE_ITEMLESS_4V4]: 'https://i.imgur.com/fdmJjfi.png', // Nitro GT
-      [BATTLE_1V1]: 'https://i.imgur.com/0BPdwId.png', // Aku Aku
-      [BATTLE_FFA]: 'https://i.imgur.com/dCs3j9Y.png', // Invisibility
-      [BATTLE_DUOS]: 'https://i.imgur.com/4fFQLMU.png', // Master Wheels
-      [BATTLE_3V3]: 'https://i.imgur.com/4USZueO.png', // Sparx
-      [BATTLE_4V4]: 'https://i.imgur.com/UMYa2RH.png', // Neon Hawk
-      [INSTA_DUOS]: 'https://i.imgur.com/lo5dwcJ.png', // Uka + Aku Mask (same as Duos)
-      [INSTA_3V3]: 'https://i.imgur.com/0A2LVaY.png', // Triple Missile (same as 3 vs. 3)
-      [INSTA_4V4]: 'https://i.imgur.com/3dvcaur.png', // Firehawk (same as 4 vs. 4)
+      [RACE_ITEMS_FFA]: 'https://i.imgur.com/wD4xrSw.png',      // Single Bomb
+      [RACE_ITEMS_DUOS]: 'https://i.imgur.com/lo5dwcJ.png',     // Uka + Aku Mask
+      [RACE_ITEMS_3V3]: 'https://i.imgur.com/0A2LVaY.png',      // Triple Missile
+      [RACE_ITEMS_4V4]: 'https://i.imgur.com/3dvcaur.png',      // Firehawk
+      [RACE_SURVIVAL]: 'https://i.imgur.com/QqA2CK5.png',       // Poison Symbol
+      [RACE_ITEMLESS_1V1]: 'https://i.imgur.com/45dXDSf.png',   // Champion Kart
+      [RACE_ITEMLESS_FFA]: 'https://i.imgur.com/ZmrfJJN.png',   // Daredevil
+      [RACE_ITEMLESS_DUOS]: 'https://i.imgur.com/7gFxsmu.png',  // Xfinity Kart
+      [RACE_ITEMLESS_3V3]: 'https://i.imgur.com/ZCv0Uwl.png',   // Mammoth
+      [RACE_ITEMLESS_4V4]: 'https://i.imgur.com/fdmJjfi.png',   // Nitro GT
+      [BATTLE_1V1]: 'https://i.imgur.com/0BPdwId.png',          // Aku Aku
+      [BATTLE_FFA]: 'https://i.imgur.com/dCs3j9Y.png',          // Invisibility
+      [BATTLE_DUOS]: 'https://i.imgur.com/4fFQLMU.png',         // Master Wheels
+      [BATTLE_3V3]: 'https://i.imgur.com/4USZueO.png',          // Sparx
+      [BATTLE_4V4]: 'https://i.imgur.com/UMYa2RH.png',          // Neon Hawk
+      [INSTA_DUOS]: 'https://i.imgur.com/lo5dwcJ.png',          // Uka + Aku Mask (same as Duos)
+      [INSTA_3V3]: 'https://i.imgur.com/0A2LVaY.png',           // Triple Missile (same as 3 vs. 3)
+      [INSTA_4V4]: 'https://i.imgur.com/3dvcaur.png',           // Firehawk (same as 4 vs. 4)
+      [CHAOS]: 'https://i.imgur.com/kX9260g.png',               // ? Crate
     };
 
     return icons[this.type];
@@ -771,6 +812,7 @@ Lobby.methods = {
       [INSTA_DUOS]: 'Duos',
       [INSTA_3V3]: '3v3',
       [INSTA_4V4]: '4v4',
+      [CHAOS]: 'Chaos',
     };
 
     roleName += modeNames[this.type];
@@ -783,24 +825,25 @@ Lobby.methods = {
     }
 
     const colors = {
-      [RACE_ITEMS_FFA]: 3707391, // Blue
-      [RACE_ITEMS_DUOS]: 16732141, // Pink
-      [RACE_ITEMS_3V3]: 16724019, // Red
-      [RACE_ITEMS_4V4]: 9568066, // Green
-      [RACE_SURVIVAL]: 0, // Black
-      [RACE_ITEMLESS_1V1]: 6360569, // Purple
-      [RACE_ITEMLESS_FFA]: 7917555, // Sky Blue
+      [RACE_ITEMS_FFA]: 3707391,      // Blue
+      [RACE_ITEMS_DUOS]: 16732141,    // Pink
+      [RACE_ITEMS_3V3]: 16724019,     // Red
+      [RACE_ITEMS_4V4]: 9568066,      // Green
+      [RACE_SURVIVAL]: 0,             // Black
+      [RACE_ITEMLESS_1V1]: 6360569,   // Purple
+      [RACE_ITEMLESS_FFA]: 7917555,   // Sky Blue
       [RACE_ITEMLESS_DUOS]: 16777215, // White
-      [RACE_ITEMLESS_3V3]: 14138792, // Beige
-      [RACE_ITEMLESS_4V4]: 6856623, // Teal
-      [BATTLE_1V1]: 7292965, // Brown
-      [BATTLE_FFA]: 9605778, // Grey
-      [BATTLE_DUOS]: 7944547, // Magenta
-      [BATTLE_3V3]: 15714364, // Honey
-      [BATTLE_4V4]: 11299064, // Medium Pink
-      [INSTA_DUOS]: 16732141, // Pink
-      [INSTA_3V3]: 16724019, // Red
-      [INSTA_4V4]: 9568066, // Green
+      [RACE_ITEMLESS_3V3]: 14138792,  // Beige
+      [RACE_ITEMLESS_4V4]: 6856623,   // Teal
+      [BATTLE_1V1]: 7292965,          // Brown
+      [BATTLE_FFA]: 9605778,          // Grey
+      [BATTLE_DUOS]: 7944547,         // Magenta
+      [BATTLE_3V3]: 15714364,         // Honey
+      [BATTLE_4V4]: 11299064,         // Medium Pink
+      [INSTA_DUOS]: 16732141,         // Pink
+      [INSTA_3V3]: 16724019,          // Red
+      [INSTA_4V4]: 9568066,           // Green
+      [CHAOS]: 16746496,              // Orange
     };
 
     return colors[this.type];
@@ -908,6 +951,7 @@ Lobby.methods = {
       [INSTA_DUOS]: 37,
       [INSTA_3V3]: 37,
       [INSTA_4V4]: 37,
+      [CHAOS]: 37,
     };
 
     return maxTrackCount[this.type];
@@ -932,6 +976,7 @@ Lobby.methods = {
       [INSTA_DUOS]: 5,
       [INSTA_3V3]: 5,
       [INSTA_4V4]: 5,
+      [CHAOS]: 5,
     };
 
     return defaultLapCount[this.type];
@@ -941,6 +986,10 @@ Lobby.methods = {
     return (this.trackCount === this.getMaxTrackCount() && !this.isTournament() && !this.isSurvival());
   },
   getTrackOptions() {
+    if (this.isChaos()) {
+      return [TRACK_OPTION_RNG, TRACK_OPTION_DRAFT];
+    }
+
     // all lobby types at least have full rng and pools
     const availableTrackOptions = [
       TRACK_OPTION_RNG,
@@ -954,6 +1003,10 @@ Lobby.methods = {
     return availableTrackOptions;
   },
   getBannedTracks() {
+    if (this.isChaos()) {
+      return [];
+    }
+
     const bannedTracks = [];
 
     if (this.regions.length !== 1) {
@@ -992,11 +1045,16 @@ Lobby.methods = {
       [INSTA_DUOS]: 1200,
       [INSTA_3V3]: 1200,
       [INSTA_4V4]: 1200,
+      [CHAOS]: 1200,
     };
 
     return defaultRanks[this.type];
   },
   canBeRanked() {
+    if (this.isChaos()) {
+      return this.hasLeaderboard();
+    }
+
     // eslint-disable-next-line max-len
     return (
       (this.lapCount === this.getDefaultLapCount() || this.isBattle())
@@ -1034,6 +1092,7 @@ Lobby.methods = {
       [INSTA_DUOS]: false,
       [INSTA_3V3]: false,
       [INSTA_4V4]: false,
+      [CHAOS]: false,
     };
 
     return enabled[this.type];
@@ -1058,6 +1117,7 @@ Lobby.methods = {
       [INSTA_DUOS]: [RACE_ITEMS_FFA, RACE_ITEMS_DUOS, RACE_ITEMS_3V3, RACE_ITEMS_4V4, INSTA_DUOS, INSTA_3V3, INSTA_4V4],
       [INSTA_3V3]: [RACE_ITEMS_FFA, RACE_ITEMS_DUOS, RACE_ITEMS_3V3, RACE_ITEMS_4V4, INSTA_DUOS, INSTA_3V3, INSTA_4V4],
       [INSTA_4V4]: [RACE_ITEMS_FFA, RACE_ITEMS_DUOS, RACE_ITEMS_3V3, RACE_ITEMS_4V4, INSTA_DUOS, INSTA_3V3, INSTA_4V4],
+      [CHAOS]: [RACE_ITEMS_FFA, RACE_ITEMS_4V4, RACE_ITEMLESS_FFA, RACE_ITEMLESS_4V4, BATTLE_FFA, BATTLE_4V4],
     };
 
     return modePools[this.type];
@@ -1067,6 +1127,11 @@ Lobby.methods = {
 
     if (this.trackCount <= 0 || this.isTournament() || !trackOption.hasDefinitionFile) {
       return [];
+    }
+
+    if (this.isChaos()) {
+      const allTracks = poolItems3.flat().concat(poolBattle3.flat());
+      return [allTracks];
     }
 
     let pools;
@@ -1119,11 +1184,20 @@ Lobby.methods = {
     const promises = [];
     const playersToFetch = [];
 
-    if (this.isSolos()) {
-      playersToFetch.push(...this.players);
+    if (this.isChaos()) {
+      const shuffledCaptains = shuffleArray([...this.players]);
+      const randomAmount = Math.ceil(Math.random() * shuffledCaptains.length);
+
+      for (let i = 0; i < randomAmount; i++) {
+        playersToFetch.push(shuffledCaptains[i]);
+      }
     } else {
-      for (const team in this.teamList) {
-        playersToFetch.push(getRandomArrayElement(this.teamList[team]));
+      if (this.isSolos()) {
+        playersToFetch.push(...this.players);
+      } else {
+        for (const team in this.teamList) {
+          playersToFetch.push(getRandomArrayElement(this.teamList[team]));
+        }
       }
     }
 
@@ -1133,11 +1207,13 @@ Lobby.methods = {
 
     Promise.all(promises).then((captains) => {
       const bannedTracks = this.getBannedTracks();
+
       const options = {
         enableDragonMines: !bannedTracks.includes(TRACK_DRAGON_MINES),
         enableHyperSpaceway: !bannedTracks.includes(TRACK_HYPER_SPACEWAY),
         enableRetroStadium: false,
         enableSpyroCircuit: !bannedTracks.includes(TRACK_SPYRO_CIRCUIT),
+        enableArenas: this.isChaos(),
         showDraftLog: true,
         pickTimeout: 60,
         pinTrackList: true
@@ -1179,6 +1255,10 @@ Lobby.methods = {
           break;
         case BATTLE_4V4:
           createDraftv2(channel, 2, 0, 4, 30, captains);
+          break;
+        case CHAOS:
+          const banCount = Math.floor(Math.random() * 3);
+          discordDraft(channel, captains, CHAOS, banCount, 1, options).then();
           break;
         default:
           break;

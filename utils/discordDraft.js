@@ -34,6 +34,14 @@ const trackTypes = [
   },
 ];
 
+const tracksArenasCombined = [
+  ...trackTypes,
+  {
+    key: 'arenas',
+    name: 'Battle Arenas',
+  },
+];
+
 /**
  * Asks the user to select a track
  * @param channel
@@ -58,18 +66,20 @@ async function getTrackSelection(channel, user, excludedTracks, phase, draftOpti
   let trackType = null;
   let track = null;
 
+  const availableTrackTypes = draftOptions.enableArenas ? tracksArenasCombined : trackTypes;
+
   while (true) {
     const now = parseInt(Date.now() / 1000);
     const remainingTime = draftOptions.pickTimeout - (now - pickStart);
 
     if (remainingTime > 0) {
-      trackType = await channel.awaitMenuChoice(`Please select a track pool. You have ${remainingTime} second(s) left.`, user.id, trackTypes, 1, null, remainingTime);
-    
+      trackType = await channel.awaitMenuChoice(`Please select a track pool. You have ${remainingTime} second(s) left.`, user.id, availableTrackTypes, 1, null, remainingTime);
+
       if (trackType === null) {
-        trackType = getRandomArrayElement(trackTypes.map((t) => t.key));
+        trackType = getRandomArrayElement(availableTrackTypes.map((t) => t.key));
       }
     } else {
-      trackType = getRandomArrayElement(trackTypes.map((t) => t.key));
+      trackType = getRandomArrayElement(availableTrackTypes.map((t) => t.key));
     }
   
     // eslint-disable-next-line global-require,import/no-dynamic-require
@@ -166,6 +176,7 @@ async function discordDraft(channel, mentions, type, bans, picks, options) {
   options.enableHyperSpaceway = options.enableHyperSpaceway || false;
   options.enableRetroStadium = options.enableRetroStadium || false;
   options.enableSpyroCircuit = options.enableSpyroCircuit || false;
+  options.enableArenas = options.enableArenas || false;
   options.showDraftLog = options.showDraftLog || false;
   options.pickTimeout = options.pickTimeout || 60;
   options.pinTrackList = options.pinTrackList || false;

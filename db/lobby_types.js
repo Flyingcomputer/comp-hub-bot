@@ -150,7 +150,7 @@ module.exports.lobbyTypes = [
   {
     key: CHAOS,
     name: 'Chaos',
-    description: 'Random mix of items, itemless and battle with random formats.',
+    description: null,
     emote: null,
     default: false,
   },

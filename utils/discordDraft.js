@@ -34,13 +34,6 @@ const trackTypes = [
   },
 ];
 
-const tracksArenasCombined = [
-  ...trackTypes,
-  {
-    key: 'arenas',
-    name: 'Battle Arenas',
-  },
-];
 
 /**
  * Asks the user to select a track
@@ -66,7 +59,7 @@ async function getTrackSelection(channel, user, excludedTracks, phase, draftOpti
   let trackType = null;
   let track = null;
 
-  const availableTrackTypes = draftOptions.enableArenas ? tracksArenasCombined : trackTypes;
+  const availableTrackTypes = trackTypes;
 
   while (true) {
     const now = parseInt(Date.now() / 1000);
@@ -176,7 +169,6 @@ async function discordDraft(channel, mentions, type, bans, picks, options) {
   options.enableHyperSpaceway = options.enableHyperSpaceway || false;
   options.enableRetroStadium = options.enableRetroStadium || false;
   options.enableSpyroCircuit = options.enableSpyroCircuit || false;
-  options.enableArenas = options.enableArenas || false;
   options.showDraftLog = options.showDraftLog || false;
   options.pickTimeout = options.pickTimeout || 60;
   options.pinTrackList = options.pinTrackList || false;

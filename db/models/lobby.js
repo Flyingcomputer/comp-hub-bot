@@ -316,7 +316,7 @@ const Lobby = new Schema({
   },
   chaosRandomLaps: {
     type: Boolean,
-    default: true,
+    default: false,
   },
   chaosRandomEngines: {
     type: Boolean,
@@ -987,7 +987,7 @@ Lobby.methods = {
   },
   getTrackOptions() {
     if (this.isChaos()) {
-      return [TRACK_OPTION_RNG, TRACK_OPTION_DRAFT];
+      return [TRACK_OPTION_RNG];
     }
 
     // all lobby types at least have full rng and pools
@@ -1213,7 +1213,6 @@ Lobby.methods = {
         enableHyperSpaceway: !bannedTracks.includes(TRACK_HYPER_SPACEWAY),
         enableRetroStadium: false,
         enableSpyroCircuit: !bannedTracks.includes(TRACK_SPYRO_CIRCUIT),
-        enableArenas: this.isChaos(),
         showDraftLog: true,
         pickTimeout: 60,
         pinTrackList: true
@@ -1255,10 +1254,6 @@ Lobby.methods = {
           break;
         case BATTLE_4V4:
           createDraftv2(channel, 2, 0, 4, 30, captains);
-          break;
-        case CHAOS:
-          const banCount = Math.floor(Math.random() * 3);
-          discordDraft(channel, captains, CHAOS, banCount, 1, options).then();
           break;
         default:
           break;

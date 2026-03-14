@@ -1193,7 +1193,7 @@ function startLobby(docId) {
                   chaosModes.push('Battle');
                   chaosRulesets.push(null);
                 } else {
-                  const mode = Math.random() > 0.5 ? 'Items' : 'Itemless';
+                  const mode = 'Items';
                   const laps = doc.chaosRandomLaps ? getRandomArrayElement(raceLapCounts) : doc.lapCount;
                   const ruleset = doc.chaosRandomRulesets ? getRandomArrayElement(rulesets) : null;
                   chaosLapCounts.push(laps);
@@ -1844,7 +1844,7 @@ module.exports = {
 
           lobby.trackOption = trackOption;
 
-          let chaosRandomLaps = true;
+          let chaosRandomLaps = false;
           if (lobby.isChaos() && custom.includes(CUSTOM_OPTION_CHAOS_RANDOM_LAPS)) {
             try {
               const buttonId = await message.channel.awaitButtonChoice(
